@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Ponto Eletrônico - Modo Quiosque</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1095c1">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <main class="container">
+    <header class="no-print">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="brand-title">
+          <i data-lucide="clock"></i>
+          <span>Ponto Eletrônico PWA</span>
+        </div>
+        <div>
+          <a href="admin.html" class="outline role="button" style="padding: 0.4rem 0.8rem; font-size: 0.9rem;">
+            <i data-lucide="shield"></i> Painel do Gestor
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Display Relógio -->
+    <section class="clock-display no-print">
+      <div id="clock-time" class="clock-time">00:00:00</div>
+      <div id="clock-date" class="clock-date">Carregando data...</div>
+    </section>
+
+    <!-- Formulário do Quiosque -->
+    <section class="card no-print">
+      <form id="punch-form" onsubmit="return false;">
+        <label for="employee-select">
+          <strong>Identificação do Colaborador</strong>
+          <select id="employee-select" required>
+            <option value="" disabled selected>Selecione seu nome...</option>
+          </select>
+        </label>
+
+        <label for="night-shift-check" style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+          <input type="checkbox" id="night-shift-check" role="switch">
+          <span>Turno Noturno (Virada de dia)</span>
+        </label>
+
+        <div class="punch-grid">
+          <button type="button" class="punch-btn contrast" data-type="entrada1">
+            <i data-lucide="log-in"></i>
+            Entrada 1
+          </button>
+          <button type="button" class="punch-btn secondary" data-type="saida1">
+            <i data-lucide="log-out"></i>
+            Saída 1
+          </button>
+          <button type="button" class="punch-btn contrast" data-type="entrada2">
+            <i data-lucide="corner-down-right"></i>
+            Entrada 2
+          </button>
+          <button type="button" class="punch-btn secondary" data-type="saida2">
+            <i data-lucide="check-square"></i>
+            Saída 2
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Mensagens de Feedback -->
+    <section id="feedback-message" class="no-print" style="margin-top: 1rem; display: none;">
+      <article id="feedback-article">
+        <span id="feedback-text"></span>
+      </article>
+    </section>
+
+    <!-- Comprovante para Exibição e Impressão -->
+    <section id="receipt-section">
+      <div class="receipt-card">
+        <h4 style="text-align: center; margin-bottom: 0.5rem;">Comprovante de Ponto</h4>
+        <hr />
+        <p><strong>Empresa:</strong> Ponto Eletrônico PWA</p>
+        <p><strong>Colaborador:</strong> <span id="receipt-emp-name">-</span></p>
+        <p><strong>ID Colaborador:</strong> <span id="receipt-emp-id">-</span></p>
+        <p><strong>Data/Hora do Registro:</strong> <span id="receipt-time">-</span></p>
+        <p><strong>Tipo de Batida:</strong> <span id="receipt-type">-</span></p>
+        <p><strong>Data de Referência:</strong> <span id="receipt-ref-date">-</span></p>
+        <p><strong>Código de Autenticação:</strong> <span id="receipt-auth">-</span></p>
+        <hr />
+        <div style="text-align: center;" class="no-print">
+          <button class="outline primary" onclick="window.print()">Imprimir Comprovante</button>
+          <button class="outline secondary" onclick="document.getElementById('receipt-section').style.display='none'">Fechar</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { registerPunch, syncPendingPunches } from './js/ponto.js';
+    import { getEmployees } from './js/admin.js';
+
+    // Atualização do Relógio
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock-time').textContent = now.toLocaleTimeString('pt-BR');
+      document.getElementById('clock-date').textContent = now.toLocaleDateString('pt-BR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Carregamento de Funcionários
+    let employeesList = [];
+    async function loadEmployees() {
+      employeesList = await getEmployees();
+      const select = document.getElementById('employee-select');
+      select.innerHTML = '<option value="" disabled selected>Selecione seu nome...</option>';
+      employeesList.forEach(emp => {
+        const opt = document.createElement('option');
+        opt.value = emp.id;
+        opt.textContent = `${emp.nome} - ${emp.cargo}`;
+        select.appendChild(opt);
+      });
+    }
+
+    // Processamento de Registro
+    async function handlePunch(tipo) {
+      const select = document.getElementById('employee-select');
+      const empId = select.value;
+
+      if (!empId) {
+        showFeedback('Por favor, selecione seu nome antes de registrar o ponto.', 'warning');
+        return;
+      }
+
+      const selectedEmp = employeesList.find(e => e.id === empId);
+      const isNightShift = document.getElementById('night-shift-check').checked;
+
+      let shiftStartDate = null;
+      if (isNightShift) {
+        // Se for turno noturno com virada de dia, solicita ou calcula a data de início do turno
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        shiftStartDate = yesterday.toISOString().split('T')[0];
+      }
+
+      const result = await registerPunch({
+        funcionarioId: empId,
+        tipo: tipo,
+        shiftStartDate: shiftStartDate
+      });
+
+      if (result.success) {
+        const msg = result.offline ? result.message : 'Ponto registrado com sucesso!';
+        showFeedback(msg, result.offline ? 'warning' : 'success');
+        showReceipt(selectedEmp, result.data);
+      } else {
+        showFeedback('Falha ao registrar o ponto.', 'error');
+      }
+    }
+
+    function showFeedback(text, type) {
+      const section = document.getElementById('feedback-message');
+      const article = document.getElementById('feedback-article');
+      const span = document.getElementById('feedback-text');
+
+      span.textContent = text;
+      section.style.display = 'block';
+
+      if (type === 'success') {
+        article.style.borderLeft = '4px solid var(--success-color)';
+      } else if (type === 'warning') {
+        article.style.borderLeft = '4px solid var(--warning-color)';
+      } else {
+        article.style.borderLeft = '4px solid var(--alert-color)';
+      }
+
+      setTimeout(() => {
+        section.style.display = 'none';
+      }, 5000);
+    }
+
+    function showReceipt(employee, punch) {
+      document.getElementById('receipt-emp-name').textContent = employee ? employee.nome : 'Desconhecido';
+      document.getElementById('receipt-emp-id').textContent = punch.funcionario_id;
+      document.getElementById('receipt-time').textContent = new Date(punch.timestamp).toLocaleString('pt-BR');
+      document.getElementById('receipt-type').textContent = punch.tipo.toUpperCase();
+      document.getElementById('receipt-ref-date').textContent = punch.data_referencia;
+      document.getElementById('receipt-auth').textContent = punch.id;
+
+      document.getElementById('receipt-section').style.display = 'block';
+    }
+
+    // Event Listeners
+    document.querySelectorAll('.punch-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const tipo = e.currentTarget.getAttribute('data-type');
+        handlePunch(tipo);
+      });
+    });
+
+    // PWA Service Worker Registration
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => {
+          console.warn('Registro do Service Worker falhou:', err);
+        });
+      });
+    }
+
+    // Inicialização
+    loadEmployees();
+    syncPendingPunches();
+    lucide.createIcons();
+  </script>
+</body>
+</html>

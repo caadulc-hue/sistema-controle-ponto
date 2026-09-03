@@ -1,0 +1,21 @@
+{
+  "short_name": "Ponto PWA",
+  "name": "Sistema de Ponto Eletrônico PWA",
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "./index.html",
+  "background_color": "#11191f",
+  "theme_color": "#1095c1",
+  "display": "standalone",
+  "orientation": "portrait"
+}
