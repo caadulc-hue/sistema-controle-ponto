@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel do Gestor - Sistema de Ponto</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <main class="container">
+    <header>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="brand-title">
+          <i data-lucide="shield-check"></i>
+          <span>Painel do Gestor / RH</span>
+        </div>
+        <div>
+          <a href="index.html" class="outline" role="button" style="padding: 0.4rem 0.8rem; font-size: 0.9rem;">
+            <i data-lucide="clock"></i> Modo Quiosque
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navegação de Abas -->
+    <nav>
+      <ul>
+        <li><a href="#dashboard" id="tab-dashboard" class="secondary" style="font-weight: 600;">Visão Geral & Banco de Horas</a></li>
+        <li><a href="#registros" id="tab-registros" class="secondary">Registros & Ajustes</a></li>
+        <li><a href="#auditoria" id="tab-auditoria" class="secondary">Trilha de Auditoria</a></li>
+      </ul>
+    </nav>
+
+    <!-- Seção 1: Dashboard e Banco de Horas -->
+    <section id="sec-dashboard">
+      <h3>Visão Geral dos Colaboradores</h3>
+      <figure>
+        <table role="grid">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Cargo</th>
+              <th>Status</th>
+              <th>Saldo de Horas</th>
+              <th>Conformidade</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-employees">
+            <tr><td colspan="5">Carregando dados...</td></tr>
+          </tbody>
+        </table>
+      </figure>
+    </section>
+
+    <!-- Seção 2: Registros de Ponto e Ajustes -->
+    <section id="sec-registros" style="display: none;">
+      <h3>Registros de Ponto</h3>
+
+      <!-- Filtros -->
+      <div class="grid">
+        <label for="filter-employee">
+          Colaborador:
+          <select id="filter-employee">
+            <option value="">Todos os Colaboradores</option>
+          </select>
+        </label>
+        <label for="filter-date">
+          Data de Referência:
+          <input type="date" id="filter-date">
+        </label>
+      </div>
+
+      <figure>
+        <table role="grid">
+          <thead>
+            <tr>
+              <th>Data/Hora</th>
+              <th>Colaborador</th>
+              <th>Tipo</th>
+              <th>Data Ref.</th>
+              <th>Origem</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-records">
+            <tr><td colspan="6">Carregando registros...</td></tr>
+          </tbody>
+        </table>
+      </figure>
+    </section>
+
+    <!-- Modal de Ajuste Retroativo -->
+    <dialog id="modal-adjust">
+      <article style="max-width: 500px;">
+        <header>
+          <a href="#close" aria-label="Close" class="close" id="btn-close-modal"></a>
+          <strong>Ajuste Retroativo de Ponto</strong>
+        </header>
+        <form id="form-adjust" onsubmit="return false;">
+          <input type="hidden" id="adjust-record-id">
+
+          <label for="adjust-timestamp">
+            Nova Data / Hora:
+            <input type="datetime-local" id="adjust-timestamp" required>
+          </label>
+
+          <label for="adjust-tipo">
+            Tipo de Batida:
+            <select id="adjust-tipo" required>
+              <option value="entrada1">Entrada 1</option>
+              <option value="saida1">Saída 1</option>
+              <option value="entrada2">Entrada 2</option>
+              <option value="saida2">Saída 2</option>
+            </select>
+          </label>
+
+          <label for="adjust-motivo">
+            Justificativa Obrigatória:
+            <textarea id="adjust-motivo" rows="3" placeholder="Informe o motivo fundamentado do ajuste..." required></textarea>
+          </label>
+
+          <footer>
+            <button type="button" class="secondary" id="btn-cancel-adjust">Cancelar</button>
+            <button type="submit" id="btn-save-adjust">Salvar Ajuste</button>
+          </footer>
+        </form>
+      </article>
+    </dialog>
+
+    <!-- Seção 3: Trilha de Auditoria -->
+    <section id="sec-auditoria" style="display: none;">
+      <h3>Trilha de Auditoria (Audit Trail)</h3>
+      <figure>
+        <table role="grid">
+          <thead>
+            <tr>
+              <th>Data/Hora</th>
+              <th>Usuário</th>
+              <th>Ação</th>
+              <th>Registro Afetado</th>
+              <th>Justificativa</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-audit">
+            <tr><td colspan="5">Carregando logs de auditoria...</td></tr>
+          </tbody>
+        </table>
+      </figure>
+    </section>
+
+  </main>
+
+  <script type="module">
+    import { getEmployees, getPunchRecords, adjustPunchRecord, getAuditLogs } from './js/admin.js';
+    import { formatSaldo, checkCriticalLimit } from './js/calc.js';
+
+    // Navegação por Abas
+    const tabs = {
+      dashboard: document.getElementById('sec-dashboard'),
+      registros: document.getElementById('sec-registros'),
+      auditoria: document.getElementById('sec-auditoria')
+    };
+
+    function showTab(name) {
+      Object.keys(tabs).forEach(k => {
+        tabs[k].style.display = (k === name) ? 'block' : 'none';
+      });
+      if (name === 'dashboard') loadDashboard();
+      if (name === 'registros') loadRecords();
+      if (name === 'auditoria') loadAudit();
+    }
+
+    document.getElementById('tab-dashboard').addEventListener('click', (e) => { e.preventDefault(); showTab('dashboard'); });
+    document.getElementById('tab-registros').addEventListener('click', (e) => { e.preventDefault(); showTab('registros'); });
+    document.getElementById('tab-auditoria').addEventListener('click', (e) => { e.preventDefault(); showTab('auditoria'); });
+
+    // Carregar Dashboard
+    async function loadDashboard() {
+      const employees = await getEmployees();
+      const tbody = document.getElementById('tbl-employees');
+      const selectFilter = document.getElementById('filter-employee');
+
+      tbody.innerHTML = '';
+      selectFilter.innerHTML = '<option value="">Todos os Colaboradores</option>';
+
+      employees.forEach(emp => {
+        // Opção do filtro
+        const opt = document.createElement('option');
+        opt.value = emp.id;
+        opt.textContent = emp.nome;
+        selectFilter.appendChild(opt);
+
+        // Tabela do Dashboard
+        const tr = document.createElement('tr');
+        const saldoMinutos = emp.saldo_minutos || 0;
+        const saldoFormatted = formatSaldo(saldoMinutos);
+        const criticalInfo = checkCriticalLimit(saldoMinutos);
+
+        const statusBadge = criticalInfo.isCritical
+          ? `<span class="status-badge status-critico"><i data-lucide="alert-triangle"></i> ALERTA CRÍTICO</span>`
+          : `<span class="status-badge status-normal"><i data-lucide="check-circle"></i> NORMAL</span>`;
+
+        tr.innerHTML = `
+          <td><strong>${emp.nome}</strong></td>
+          <td>${emp.cargo}</td>
+          <td>${emp.status || 'ativo'}</td>
+          <td><code>${saldoFormatted}</code></td>
+          <td>${statusBadge}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      lucide.createIcons();
+    }
+
+    // Carregar Registros
+    async function loadRecords() {
+      const empId = document.getElementById('filter-employee').value;
+      const refDate = document.getElementById('filter-date').value;
+
+      const records = await getPunchRecords({ funcionarioId: empId, dataReferencia: refDate });
+      const tbody = document.getElementById('tbl-records');
+      tbody.innerHTML = '';
+
+      if (records.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6">Nenhum registro encontrado.</td></tr>';
+        return;
+      }
+
+      records.forEach(rec => {
+        const tr = document.createElement('tr');
+        const empName = rec.funcionarios ? rec.funcionarios.nome : (rec.funcionario_id || 'N/A');
+        const formattedTime = new Date(rec.timestamp).toLocaleString('pt-BR');
+
+        tr.innerHTML = `
+          <td>${formattedTime}</td>
+          <td><strong>${empName}</strong></td>
+          <td><code>${rec.tipo.toUpperCase()}</code></td>
+          <td>${rec.data_referencia}</td>
+          <td><small>${rec.origem || 'quiosque'}</small></td>
+          <td>
+            <button class="outline primary" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;" onclick="openAdjustModal('${rec.id}', '${rec.timestamp}', '${rec.tipo}')">
+              Ajustar
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('filter-employee').addEventListener('change', loadRecords);
+    document.getElementById('filter-date').addEventListener('change', loadRecords);
+
+    // Modal de Ajuste
+    window.openAdjustModal = function(id, currentTs, currentTipo) {
+      document.getElementById('adjust-record-id').value = id;
+      document.getElementById('adjust-tipo').value = currentTipo;
+
+      // Formatar timestamp para datetime-local
+      const d = new Date(currentTs);
+      const isoLocal = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+      document.getElementById('adjust-timestamp').value = isoLocal;
+
+      document.getElementById('modal-adjust').setAttribute('open', 'true');
+    };
+
+    function closeModal() {
+      document.getElementById('modal-adjust').removeAttribute('open');
+      document.getElementById('form-adjust').reset();
+    }
+
+    document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+    document.getElementById('btn-cancel-adjust').addEventListener('click', closeModal);
+
+    document.getElementById('form-adjust').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('adjust-record-id').value;
+      const tsLocal = document.getElementById('adjust-timestamp').value;
+      const tipo = document.getElementById('adjust-tipo').value;
+      const motivo = document.getElementById('adjust-motivo').value;
+
+      try {
+        const isoString = new Date(tsLocal).toISOString();
+        await adjustPunchRecord({
+          registroId: id,
+          novoTimestamp: isoString,
+          novoTipo: tipo,
+          motivo: motivo
+        });
+        alert('Ajuste realizado e registrado na auditoria com sucesso!');
+        closeModal();
+        loadRecords();
+      } catch (err) {
+        alert('Erro ao realizar ajuste: ' + err.message);
+      }
+    });
+
+    // Carregar Auditoria
+    async function loadAudit() {
+      const logs = await getAuditLogs();
+      const tbody = document.getElementById('tbl-audit');
+      tbody.innerHTML = '';
+
+      if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">Nenhum evento de auditoria registrado.</td></tr>';
+        return;
+      }
+
+      logs.forEach(log => {
+        const tr = document.createElement('tr');
+        const formattedTime = new Date(log.created_at).toLocaleString('pt-BR');
+        tr.innerHTML = `
+          <td>${formattedTime}</td>
+          <td>${log.usuario_id || 'Gestor'}</td>
+          <td><code>${log.acao}</code></td>
+          <td><small>${log.entidade_id}</small></td>
+          <td>${log.motivo}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Inicialização
+    loadDashboard();
+    lucide.createIcons();
+  </script>
+</body>
+</html>
