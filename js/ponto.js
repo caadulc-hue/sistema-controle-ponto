@@ -1,32 +1,9 @@
 import { supabase } from './supabase.js';
-import { getReferenceDate } from './calc.js';
+import { getReferenceDate, PUNCH_SEQUENCE, getNextExpectedPunchType, validatePunchSequence } from './calc.js';
+
+export { PUNCH_SEQUENCE, getNextExpectedPunchType, validatePunchSequence };
 
 const PENDING_PUNCHES_KEY = 'ponto_pending_punches';
-
-export const PUNCH_SEQUENCE = ['entrada1', 'saida1', 'entrada2', 'saida2'];
-
-/**
- * Retorna a próxima batida esperada na sequência lógica
- */
-export function getNextExpectedPunchType(lastType) {
-  if (!lastType) return 'entrada1';
-  const idx = PUNCH_SEQUENCE.indexOf(lastType.toLowerCase());
-  if (idx === -1 || idx === PUNCH_SEQUENCE.length - 1) {
-    return 'entrada1';
-  }
-  return PUNCH_SEQUENCE[idx + 1];
-}
-
-/**
- * Valida se a nova batida atende à sequência esperada
- */
-export function validatePunchSequence(lastType, newType) {
-  if (!lastType) {
-    return { valid: newType === 'entrada1', expected: 'entrada1' };
-  }
-  const expected = getNextExpectedPunchType(lastType);
-  return { valid: newType === expected, expected };
-}
 
 /**
  * Obtém a fila local de batidas offline

@@ -8,7 +8,9 @@ import {
   getReferenceDate,
   calculateIntervalMinutes,
   calculateDailyBalance,
-  checkCriticalLimit
+  checkCriticalLimit,
+  getNextExpectedPunchType,
+  validatePunchSequence
 } from '../js/calc.js';
 
 test('timeToMinutes & minutesToTime conversions', () => {
@@ -99,4 +101,17 @@ test('Limite Crítico (-20:00 horas / -1200 minutos)', () => {
     status: 'ALERTA_CRITICO',
     limitMinutes: -1200
   });
+});
+
+test('Sequência de batidas e validação de fluxo', () => {
+  assert.equal(getNextExpectedPunchType(null), 'entrada1');
+  assert.equal(getNextExpectedPunchType('entrada1'), 'saida1');
+  assert.equal(getNextExpectedPunchType('saida1'), 'entrada2');
+  assert.equal(getNextExpectedPunchType('entrada2'), 'saida2');
+  assert.equal(getNextExpectedPunchType('saida2'), 'entrada1');
+
+  assert.deepEqual(validatePunchSequence(null, 'entrada1'), { valid: true, expected: 'entrada1' });
+  assert.deepEqual(validatePunchSequence(null, 'saida1'), { valid: false, expected: 'entrada1' });
+  assert.deepEqual(validatePunchSequence('entrada1', 'saida1'), { valid: true, expected: 'saida1' });
+  assert.deepEqual(validatePunchSequence('entrada1', 'entrada2'), { valid: false, expected: 'saida1' });
 });
