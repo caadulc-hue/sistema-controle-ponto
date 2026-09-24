@@ -8,6 +8,10 @@ const ASSETS_TO_CACHE = [
   './js/calc.js',
   './js/ponto.js',
   './js/admin.js',
+  './js/auth.js',
+  './js/employees.js',
+  './js/kiosk.js',
+  './js/admin-page.js',
   './manifest.json',
   'https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css',
   'https://unpkg.com/lucide@latest'

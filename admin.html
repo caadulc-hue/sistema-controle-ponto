@@ -12,9 +12,14 @@
   <main class="container">
     <header>
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div class="brand-title">
-          <i data-lucide="shield-check"></i>
-          <span>Painel do Gestor / RH</span>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <div class="brand-title">
+            <i data-lucide="shield-check"></i>
+            <span>Painel do Gestor / RH</span>
+          </div>
+          <span id="network-status-badge" style="font-size: 0.8rem; padding: 0.2rem 0.5rem; border-radius: 12px; background: rgba(255,255,255,0.1);">
+            ● Online
+          </span>
         </div>
         <div>
           <a href="index.html" class="outline" role="button" style="padding: 0.4rem 0.8rem; font-size: 0.9rem;">
@@ -23,6 +28,9 @@
         </div>
       </div>
     </header>
+
+    <!-- Notificação da Interface Admin -->
+    <div id="admin-notification" style="display: none; margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: 4px;" aria-live="polite"></div>
 
     <!-- Navegação de Abas -->
     <nav>
@@ -58,8 +66,12 @@
     <section id="sec-registros" style="display: none;">
       <h3>Registros de Ponto</h3>
 
-      <!-- Filtros -->
+      <!-- Filtros e Pesquisa -->
       <div class="grid">
+        <label for="search-employee-text">
+          Buscar por Nome/Cargo:
+          <input type="search" id="search-employee-text" placeholder="Digite nome ou cargo...">
+        </label>
         <label for="filter-employee">
           Colaborador:
           <select id="filter-employee">
@@ -89,6 +101,13 @@
           </tbody>
         </table>
       </figure>
+
+      <!-- Paginação de Registros -->
+      <div id="records-pagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+        <button type="button" class="outline secondary" id="btn-records-prev" style="width: auto;">&larr; Anterior</button>
+        <span id="records-page-info">Página 1 de 1</span>
+        <button type="button" class="outline secondary" id="btn-records-next" style="width: auto;">Próxima &rarr;</button>
+      </div>
     </section>
 
     <!-- Modal de Ajuste Retroativo -->
@@ -98,7 +117,7 @@
           <a href="#close" aria-label="Close" class="close" id="btn-close-modal"></a>
           <strong>Ajuste Retroativo de Ponto</strong>
         </header>
-        <form id="form-adjust" onsubmit="return false;">
+        <form id="form-adjust">
           <input type="hidden" id="adjust-record-id">
 
           <label for="adjust-timestamp">
@@ -148,182 +167,17 @@
           </tbody>
         </table>
       </figure>
+
+      <!-- Paginação de Auditoria -->
+      <div id="audit-pagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+        <button type="button" class="outline secondary" id="btn-audit-prev" style="width: auto;">&larr; Anterior</button>
+        <span id="audit-page-info">Página 1 de 1</span>
+        <button type="button" class="outline secondary" id="btn-audit-next" style="width: auto;">Próxima &rarr;</button>
+      </div>
     </section>
 
   </main>
 
-  <script type="module">
-    import { getEmployees, getPunchRecords, adjustPunchRecord, getAuditLogs } from './js/admin.js';
-    import { formatSaldo, checkCriticalLimit } from './js/calc.js';
-
-    // Navegação por Abas
-    const tabs = {
-      dashboard: document.getElementById('sec-dashboard'),
-      registros: document.getElementById('sec-registros'),
-      auditoria: document.getElementById('sec-auditoria')
-    };
-
-    function showTab(name) {
-      Object.keys(tabs).forEach(k => {
-        tabs[k].style.display = (k === name) ? 'block' : 'none';
-      });
-      if (name === 'dashboard') loadDashboard();
-      if (name === 'registros') loadRecords();
-      if (name === 'auditoria') loadAudit();
-    }
-
-    document.getElementById('tab-dashboard').addEventListener('click', (e) => { e.preventDefault(); showTab('dashboard'); });
-    document.getElementById('tab-registros').addEventListener('click', (e) => { e.preventDefault(); showTab('registros'); });
-    document.getElementById('tab-auditoria').addEventListener('click', (e) => { e.preventDefault(); showTab('auditoria'); });
-
-    // Carregar Dashboard
-    async function loadDashboard() {
-      const employees = await getEmployees();
-      const tbody = document.getElementById('tbl-employees');
-      const selectFilter = document.getElementById('filter-employee');
-
-      tbody.innerHTML = '';
-      selectFilter.innerHTML = '<option value="">Todos os Colaboradores</option>';
-
-      employees.forEach(emp => {
-        // Opção do filtro
-        const opt = document.createElement('option');
-        opt.value = emp.id;
-        opt.textContent = emp.nome;
-        selectFilter.appendChild(opt);
-
-        // Tabela do Dashboard
-        const tr = document.createElement('tr');
-        const saldoMinutos = emp.saldo_minutos || 0;
-        const saldoFormatted = formatSaldo(saldoMinutos);
-        const criticalInfo = checkCriticalLimit(saldoMinutos);
-
-        const statusBadge = criticalInfo.isCritical
-          ? `<span class="status-badge status-critico"><i data-lucide="alert-triangle"></i> ALERTA CRÍTICO</span>`
-          : `<span class="status-badge status-normal"><i data-lucide="check-circle"></i> NORMAL</span>`;
-
-        tr.innerHTML = `
-          <td><strong>${emp.nome}</strong></td>
-          <td>${emp.cargo}</td>
-          <td>${emp.status || 'ativo'}</td>
-          <td><code>${saldoFormatted}</code></td>
-          <td>${statusBadge}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-      lucide.createIcons();
-    }
-
-    // Carregar Registros
-    async function loadRecords() {
-      const empId = document.getElementById('filter-employee').value;
-      const refDate = document.getElementById('filter-date').value;
-
-      const records = await getPunchRecords({ funcionarioId: empId, dataReferencia: refDate });
-      const tbody = document.getElementById('tbl-records');
-      tbody.innerHTML = '';
-
-      if (records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6">Nenhum registro encontrado.</td></tr>';
-        return;
-      }
-
-      records.forEach(rec => {
-        const tr = document.createElement('tr');
-        const empName = rec.funcionarios ? rec.funcionarios.nome : (rec.funcionario_id || 'N/A');
-        const formattedTime = new Date(rec.timestamp).toLocaleString('pt-BR');
-
-        tr.innerHTML = `
-          <td>${formattedTime}</td>
-          <td><strong>${empName}</strong></td>
-          <td><code>${rec.tipo.toUpperCase()}</code></td>
-          <td>${rec.data_referencia}</td>
-          <td><small>${rec.origem || 'quiosque'}</small></td>
-          <td>
-            <button class="outline primary" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;" onclick="openAdjustModal('${rec.id}', '${rec.timestamp}', '${rec.tipo}')">
-              Ajustar
-            </button>
-          </td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    document.getElementById('filter-employee').addEventListener('change', loadRecords);
-    document.getElementById('filter-date').addEventListener('change', loadRecords);
-
-    // Modal de Ajuste
-    window.openAdjustModal = function(id, currentTs, currentTipo) {
-      document.getElementById('adjust-record-id').value = id;
-      document.getElementById('adjust-tipo').value = currentTipo;
-
-      // Formatar timestamp para datetime-local
-      const d = new Date(currentTs);
-      const isoLocal = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-      document.getElementById('adjust-timestamp').value = isoLocal;
-
-      document.getElementById('modal-adjust').setAttribute('open', 'true');
-    };
-
-    function closeModal() {
-      document.getElementById('modal-adjust').removeAttribute('open');
-      document.getElementById('form-adjust').reset();
-    }
-
-    document.getElementById('btn-close-modal').addEventListener('click', closeModal);
-    document.getElementById('btn-cancel-adjust').addEventListener('click', closeModal);
-
-    document.getElementById('form-adjust').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const id = document.getElementById('adjust-record-id').value;
-      const tsLocal = document.getElementById('adjust-timestamp').value;
-      const tipo = document.getElementById('adjust-tipo').value;
-      const motivo = document.getElementById('adjust-motivo').value;
-
-      try {
-        const isoString = new Date(tsLocal).toISOString();
-        await adjustPunchRecord({
-          registroId: id,
-          novoTimestamp: isoString,
-          novoTipo: tipo,
-          motivo: motivo
-        });
-        alert('Ajuste realizado e registrado na auditoria com sucesso!');
-        closeModal();
-        loadRecords();
-      } catch (err) {
-        alert('Erro ao realizar ajuste: ' + err.message);
-      }
-    });
-
-    // Carregar Auditoria
-    async function loadAudit() {
-      const logs = await getAuditLogs();
-      const tbody = document.getElementById('tbl-audit');
-      tbody.innerHTML = '';
-
-      if (logs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5">Nenhum evento de auditoria registrado.</td></tr>';
-        return;
-      }
-
-      logs.forEach(log => {
-        const tr = document.createElement('tr');
-        const formattedTime = new Date(log.created_at).toLocaleString('pt-BR');
-        tr.innerHTML = `
-          <td>${formattedTime}</td>
-          <td>${log.usuario_id || 'Gestor'}</td>
-          <td><code>${log.acao}</code></td>
-          <td><small>${log.entidade_id}</small></td>
-          <td>${log.motivo}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    // Inicialização
-    loadDashboard();
-    lucide.createIcons();
-  </script>
+  <script type="module" src="js/admin-page.js"></script>
 </body>
 </html>

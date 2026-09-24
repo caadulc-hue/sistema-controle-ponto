@@ -1,41 +1,21 @@
 import { supabase } from './supabase.js';
-import { formatSaldo, checkCriticalLimit } from './calc.js';
+import { fetchEmployees } from './employees.js';
+import { getCurrentUser } from './auth.js';
 
 /**
- * Busca a lista de funcionários do banco de dados (ou fallback offline)
+ * Busca a lista de funcionários do banco de dados utilizando o serviço centralizado
  */
 export async function getEmployees() {
-  try {
-    const { data, error } = await supabase
-      .from('funcionarios')
-      .select('*')
-      .order('nome');
-
-    if (error || !data) {
-      console.warn('Erro ou offline ao buscar funcionários:', error);
-      return getFallbackEmployees();
-    }
-    return data;
-  } catch (err) {
-    console.warn('Exceção ao carregar funcionários:', err);
-    return getFallbackEmployees();
-  }
-}
-
-function getFallbackEmployees() {
-  return [
-    { id: '11111111-1111-1111-1111-111111111111', nome: 'Carlos Silva', cargo: 'Desenvolvedor Senior', status: 'ativo', saldo_minutos: 120 },
-    { id: '22222222-2222-2222-2222-222222222222', nome: 'Ana Souza', cargo: 'Analista de RH', status: 'ativo', saldo_minutos: -1260 },
-    { id: '33333333-3333-3333-3333-333333333333', nome: 'Roberto Lima', cargo: 'Operador de Suporte', status: 'ativo', saldo_minutos: -45 }
-  ];
+  const result = await fetchEmployees();
+  return result.employees;
 }
 
 /**
  * Busca os registros de ponto com opção de filtros
  */
-export async function getPunchRecords(filters = {}) {
+export async function getPunchRecords(filters = {}, pagination = { page: 1, limit: 10 }) {
   try {
-    let query = supabase.from('registros_ponto').select('*, funcionarios(nome, cargo)').order('timestamp', { ascending: false });
+    let query = supabase.from('registros_ponto').select('*, funcionarios(nome, cargo)', { count: 'exact' }).order('timestamp', { ascending: false });
 
     if (filters.funcionarioId) {
       query = query.eq('funcionario_id', filters.funcionarioId);
@@ -44,24 +24,46 @@ export async function getPunchRecords(filters = {}) {
       query = query.eq('data_referencia', filters.dataReferencia);
     }
 
-    const { data, error } = await query;
+    const page = pagination.page || 1;
+    const limit = pagination.limit || 10;
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    query = query.range(from, to);
+
+    const { data, error, count } = await query;
     if (error) {
       console.error('Erro ao buscar registros:', error);
-      return [];
+      return { data: [], count: 0, page, limit, totalPages: 1 };
     }
-    return data || [];
+    const totalCount = count !== null ? count : (data ? data.length : 0);
+    const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+
+    return {
+      data: data || [],
+      count: totalCount,
+      page,
+      limit,
+      totalPages
+    };
   } catch (err) {
     console.error('Exceção ao buscar registros:', err);
-    return [];
+    return { data: [], count: 0, page: 1, limit: 10, totalPages: 1 };
   }
 }
 
 /**
  * Realiza ajuste retroativo de um registro com justificativa obrigatória e gera log de auditoria
  */
-export async function adjustPunchRecord({ registroId, novoTimestamp, novoTipo, motivo, usuarioResponsavelId = 'admin-user' }) {
+export async function adjustPunchRecord({ registroId, novoTimestamp, novoTipo, motivo, usuarioResponsavelId = null }) {
   if (!motivo || motivo.trim().length === 0) {
     throw new Error('Justificativa é obrigatória para ajustes retroativos.');
+  }
+
+  // Obter usuário autenticado
+  if (!usuarioResponsavelId) {
+    const activeUser = await getCurrentUser();
+    usuarioResponsavelId = activeUser ? (activeUser.email || activeUser.id) : 'gestor_autenticado';
   }
 
   // 1. Obter valor anterior para auditoria
@@ -113,20 +115,38 @@ export async function adjustPunchRecord({ registroId, novoTimestamp, novoTipo, m
 /**
  * Busca logs da trilha de auditoria
  */
-export async function getAuditLogs() {
+export async function getAuditLogs(pagination = { page: 1, limit: 10 }) {
   try {
-    const { data, error } = await supabase
+    const page = pagination.page || 1;
+    const limit = pagination.limit || 10;
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = supabase
       .from('auditoria')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    const { data, error, count } = await query;
 
     if (error) {
       console.error('Erro ao buscar auditoria:', error);
-      return [];
+      return { data: [], count: 0, page, limit, totalPages: 1 };
     }
-    return data || [];
+
+    const totalCount = count !== null ? count : (data ? data.length : 0);
+    const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+
+    return {
+      data: data || [],
+      count: totalCount,
+      page,
+      limit,
+      totalPages
+    };
   } catch (err) {
     console.error('Exceção ao buscar auditoria:', err);
-    return [];
+    return { data: [], count: 0, page: 1, limit: 10, totalPages: 1 };
   }
 }

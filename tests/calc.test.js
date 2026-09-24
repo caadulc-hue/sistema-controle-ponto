@@ -52,10 +52,18 @@ test('Turnos Noturnos e Virada de Dia', () => {
   // Duração de 22:00 até 06:00 do dia seguinte (8h = 480 min)
   assert.equal(calculateIntervalMinutes('22:00', '06:00'), 480);
 
-  // Ancoragem de data de referência para turno noturno
+  // Ancoragem de data de referência para turno noturno com shiftStartDate explícito
   const shiftStart = '2026-09-22';
   const punchDate = new Date('2026-09-23T06:00:00');
   assert.equal(getReferenceDate(punchDate, shiftStart), '2026-09-22');
+
+  // Ancoragem automática de data de referência para turno noturno na madrugada (02:00 do dia 25/09)
+  const overnightPunch = new Date(2026, 8, 25, 2, 0, 0); // 25 de setembro às 02:00
+  assert.equal(getReferenceDate(overnightPunch, { isNightShift: true }), '2026-09-24');
+
+  // Batida diurna normal (14:00) mantêm a data do próprio dia
+  const dayPunch = new Date(2026, 8, 25, 14, 0, 0);
+  assert.equal(getReferenceDate(dayPunch, { isNightShift: false }), '2026-09-25');
 });
 
 test('Cálculo de saldo diário com tolerância', () => {
