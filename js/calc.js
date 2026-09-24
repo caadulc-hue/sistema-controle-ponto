@@ -150,3 +150,33 @@ export function checkCriticalLimit(saldoMinutos, criticalLimitMinutes = -1200) {
     limitMinutes: criticalLimitMinutes
   };
 }
+
+export const PUNCH_SEQUENCE = ['entrada1', 'saida1', 'entrada2', 'saida2'];
+
+/**
+ * Retorna a próxima batida esperada na sequência lógica
+ * @param {string|null} lastType
+ * @returns {string}
+ */
+export function getNextExpectedPunchType(lastType) {
+  if (!lastType) return 'entrada1';
+  const idx = PUNCH_SEQUENCE.indexOf(lastType.toLowerCase());
+  if (idx === -1 || idx === PUNCH_SEQUENCE.length - 1) {
+    return 'entrada1';
+  }
+  return PUNCH_SEQUENCE[idx + 1];
+}
+
+/**
+ * Valida se a nova batida atende à sequência esperada
+ * @param {string|null} lastType
+ * @param {string} newType
+ * @returns {object} { valid: boolean, expected: string }
+ */
+export function validatePunchSequence(lastType, newType) {
+  if (!lastType) {
+    return { valid: newType === 'entrada1', expected: 'entrada1' };
+  }
+  const expected = getNextExpectedPunchType(lastType);
+  return { valid: newType === expected, expected };
+}

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ponto-pwa-v1';
+const CACHE_NAME = 'ponto-pwa-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -13,6 +13,8 @@ const ASSETS_TO_CACHE = [
   './js/kiosk.js',
   './js/admin-page.js',
   './manifest.json',
+  './assets/icons/icon-192.png',
+  './assets/icons/icon-512.png',
   'https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css',
   'https://unpkg.com/lucide@latest'
 ];
