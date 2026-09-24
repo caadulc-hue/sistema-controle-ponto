@@ -64,11 +64,34 @@ export function calculateToleranceDeviation(actualMinutes, expectedMinutes, tole
  * @param {string} shiftStartDate - Data YYYY-MM-DD do início do turno (caso seja batida subsequente do turno)
  * @returns {string} Data de referência YYYY-MM-DD
  */
-export function getReferenceDate(punchDate, shiftStartDate = null) {
+/**
+ * Determina a data de referência de uma batida de ponto considerando regras de turno noturno.
+ * Se for marcado como turno noturno (isNightShift = true) e a batida ocorrer nas primeiras horas do dia (ex: 00:00 às 08:00),
+ * a batida pertence ao turno iniciado no dia anterior (N-1).
+ * Se um `shiftStartDate` explícito for fornecido, ele é priorizado.
+ *
+ * @param {Date|string} punchDate - Data/Hora da batida
+ * @param {object} options - Opções adicionais
+ * @param {boolean} options.isNightShift - Indica se o colaborador está em turno noturno
+ * @param {string|null} options.shiftStartDate - Data de início do turno (YYYY-MM-DD) se informada
+ * @param {number} options.nightCutoffHour - Hora limite matutina para virada de turno noturno (padrão 8, ou seja, até as 08:00)
+ * @returns {string} Data de referência YYYY-MM-DD
+ */
+export function getReferenceDate(punchDate, options = {}) {
+  const { isNightShift = false, shiftStartDate = null, nightCutoffHour = 8 } = (typeof options === 'string' ? { shiftStartDate: options } : options);
+
   if (shiftStartDate) {
     return shiftStartDate;
   }
-  const dateObj = typeof punchDate === 'string' ? new Date(punchDate) : punchDate;
+
+  const dateObj = typeof punchDate === 'string' ? new Date(punchDate) : new Date(punchDate.getTime());
+  const hours = dateObj.getHours();
+
+  // Se for turno noturno e a batida ocorrer na madrugada (ex: 00:00 - 07:59), pertence ao dia anterior
+  if (isNightShift && hours < nightCutoffHour) {
+    dateObj.setDate(dateObj.getDate() - 1);
+  }
+
   const year = dateObj.getFullYear();
   const month = String(dateObj.getMonth() + 1).padStart(2, '0');
   const day = String(dateObj.getDate()).padStart(2, '0');
